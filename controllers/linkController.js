@@ -6,7 +6,7 @@ const LinkController = {
   getList: async (req, res) => {
     try {
       const links = await linkModel.find();//ללא סינון
-      res.json({ links});
+      res.json({ links });
     } catch (e) {
       res.status(400).json({ message: e.message });
     }
@@ -15,51 +15,79 @@ const LinkController = {
   getById: async (req, res) => {
     const { id } = req.params;
 
-        try {
-            const link = await linkModel.findById(id);
-            if (!link) {
-                return res.status(404).json({ message: 'Link not found' });
-            }
-    
-            const targetParamName = link.targetParamName;
-            const targetParamValue = req.query[targetParamName];
+    try {
+      const link = await linkModel.findById(id);
+      if (!link) {
+        return res.status(404).json("Link not found");
+      }
 
-            const click = {
-                insertedAt: new Date(),
-                ipAddress: req.ip,
-                targetParamValue: targetParamValue || ''
-            };
-            link.clicks.push(click);
-            await link.save();
-    
-            res.redirect(link.originalUrl);
-        } catch (err) {
-            res.status(500).json({ message: err.message });
+      const paramValue = req.query[link.targetParamName];
+      const targetValueObject = link.targetValues.find(x => x.name===paramValue);
+      if(targetValueObject){
+        targetValueObject.value = targetValueObject.value+1;
+      }
+      else{
+        const object = {
+          name: paramValue, 
+          value:1
         }
+        link.targetValues.push(object);
+      }
+
+      const click = {
+        insertedAt: new Date(),
+        ipAddress: req.ip,
+        targetParamValue: paramValue || ''
+      };
+      link.clicks.push(click);
+      await link.save();
+
+      res.redirect(link.originalUrl);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
   },
 
-  add: async (req,res)=>{
+  //מתבצע רק אם משתמש מחובר
+  getSourceById:async(req, res)=>{
+    const {id} = req.params;
     try{
-      const { userId, originalUrl} = req.body;
-      const newLink = new linkModel({
-        originalUrl
-    });
-    await newLink.save();
+      const link = await linkModel.findById(id);
+      if (!link) {
+        return res.status(404).json("Link not found");
+      }
 
-    const user = await UserModel.findById(userId);
-    if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+      res.status(200).send(link.targetValues);
+    }catch{
+      res.status(500).json({ message: err.message });
     }
+  },
 
-    user.links.push(newLink._id);
-    await user.save();
+  add: async (req, res) => {
+    try {
+      const { userId, originalUrl , targetParamName} = req.body;
+     
+      const newLink = new linkModel({
+        originalUrl,
+        targetParamName
+      });
+      await newLink.save();
 
-    res.status(201).json({
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        return res.status(404).json("User not found");
+      }
+
+      user.links.push(newLink._id);
+      await user.save();
+
+      res.status(201).json({
         message: 'Link created successfully',
-        shortUrl: `http://localhost:8787/links/${newLink._id}?t=VALUE`
-    });
-    }catch (e) {
-      res.status(400).json({ message: e.message });
+        shortUrl: `http://localhost:3000/link/${newLink._id}?${targetParamName}=val1`,
+        shortUrl2: `http://localhost:3000/link/${newLink._id}?${targetParamName}=val2`
+      });
+    } catch (e) {
+      res.status(400).json(e);
     }
   }
 }
